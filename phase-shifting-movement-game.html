@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Phase Shift Game</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            font-family: 'Press Start 2P', cursive; /* Arcade font */
+            background-color: #111; /* Dark background */
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        #game-container {
+            width: 100%;
+            max-width: 90vw; /* Limit max width */
+            height: 80vh;   /* Limit max height */
+            position: relative; /* Needed for absolute positioning of overlay */
+            border: 3px solid #0f0; /* Green border */
+            box-shadow: 0 0 15px #0f0; /* Green glow */
+            border-radius: 10px; /* Rounded corners */
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+            width: 100%;
+            height: 100%;
+            border-radius: 8px; /* Match container rounding */
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #0f0;
+            font-size: 0.8em;
+            color: #0f0; /* Green text */
+            z-index: 10;
+            cursor: pointer; /* Indicate it's clickable */
+            max-width: 90%;
+        }
+         #instructions.hidden {
+             display: none;
+         }
+        #blocker { /* For pointer lock */
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex; /* Use flexbox */
+            align-items: center; /* Center vertically */
+            justify-content: center; /* Center horizontally */
+            z-index: 20;
+        }
+        #blocker-content {
+            text-align: center;
+            padding: 20px;
+            background: #222;
+            border: 2px solid #0f0;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #0f0;
+        }
+         #touch-controls {
+            display: none; /* Hidden by default, shown on touch devices */
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 15;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #0f0;
+        }
+        .touch-button {
+            background-color: #333;
+            color: #0f0;
+            border: 2px solid #0f0;
+            padding: 15px;
+            margin: 5px;
+            border-radius: 50%; /* Circular buttons */
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.2em;
+            cursor: pointer;
+            box-shadow: 0 0 5px #0f0 inset;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            width: 60px; /* Fixed size */
+            height: 60px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .touch-button:active {
+            background-color: #555;
+            box-shadow: 0 0 10px #0f0 inset;
+        }
+         /* Simple grid for touch buttons */
+        #touch-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            align-items: center;
+            justify-items: center;
+        }
+        #touch-w { grid-column: 2; grid-row: 1; }
+        #touch-a { grid-column: 1; grid-row: 2; }
+        #touch-s { grid-column: 2; grid-row: 2; }
+        #touch-d { grid-column: 3; grid-row: 2; }
+
+         /* Style for the visual shift effect */
+        .shift-effect {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(200, 200, 255, 0.5); /* Light blue flash */
+            z-index: 5;
+            pointer-events: none; /* Don't block clicks */
+            opacity: 0;
+            transition: opacity 0.05s ease-out;
+        }
+        .shift-effect.active {
+            opacity: 1;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #instructions {
+                font-size: 0.7em;
+                padding: 10px;
+            }
+             #touch-controls {
+                display: block; /* Show touch controls on smaller screens */
+             }
+             #blocker-content {
+                 font-size: 0.9em;
+             }
+             .touch-button {
+                 padding: 12px;
+                 font-size: 1em;
+                 width: 50px;
+                 height: 50px;
+             }
+        }
+         @media (max-width: 480px) {
+            #instructions {
+                font-size: 0.6em;
+                padding: 8px;
+            }
+            #blocker-content {
+                 font-size: 0.8em;
+            }
+            .touch-button {
+                 padding: 10px;
+                 font-size: 0.9em;
+                 width: 45px;
+                 height: 45px;
+             }
+             #touch-controls {
+                 bottom: 10px;
+             }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="blocker">
+             <div id="blocker-content">
+                <p style="font-size: 1.5em;">Phase Shift</p>
+                <p>Click to Play</p>
+                <p>(Use Mouse to look, WASD to Phase Shift)</p>
+             </div>
+        </div>
+        <div id="instructions">
+            Click here to toggle instructions: <br><br>
+            - Mouse: Look around<br>
+            - WASD: Phase Shift direction<br>
+            - Click: Lock mouse pointer<br>
+            - ESC: Unlock mouse pointer<br>
+            - Goal: Explore the environment using phase shifts!
+        </div>
+         <div id="shift-indicator" class="shift-effect"></div>
+        <canvas id="gameCanvas"></canvas>
+         <div id="touch-controls">
+             <div id="touch-grid">
+                 <button id="touch-w" class="touch-button">W</button>
+                 <button id="touch-a" class="touch-button">A</button>
+                 <button id="touch-s" class="touch-button">S</button>
+                 <button id="touch-d" class="touch-button">D</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script type="module">
+        // Import PointerLockControls using the module pattern
+        import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/controls/PointerLockControls.js';
+
+        let scene, camera, renderer, controls;
+        let floor, obstacles = [];
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        const velocity = new THREE.Vector3(); // Reusable vector for movement calculations
+        const direction = new THREE.Vector3(); // Reusable vector for direction calculations
+        const cameraHeight = 1.7; // Height of the camera above the ground
+        const shiftDistance = 3.0; // How far each phase shift travels
+        const shiftCooldown = 200; // Milliseconds between shifts
+        let lastShiftTime = 0; // Timestamp of the last shift
+        let shiftIndicator, blocker, instructions, gameContainer;
+        let touchW, touchA, touchS, touchD; // Touch buttons
+
+        // --- Initialization ---
+        function init() {
+            // Get DOM elements
+            blocker = document.getElementById('blocker');
+            instructions = document.getElementById('instructions');
+            shiftIndicator = document.getElementById('shift-indicator');
+            gameContainer = document.getElementById('game-container');
+            touchW = document.getElementById('touch-w');
+            touchA = document.getElementById('touch-a');
+            touchS = document.getElementById('touch-s');
+            touchD = document.getElementById('touch-d');
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a0a2a); // Dark purplish background
+            scene.fog = new THREE.Fog(0x1a0a2a, 10, 50); // Add fog for atmosphere
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, gameContainer.clientWidth / gameContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0, cameraHeight, 5); // Start position
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(gameContainer.clientWidth, gameContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI screens
+            renderer.shadowMap.enabled = true; // Enable shadows
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404060, 0.6); // Soft ambient light
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+            // Configure shadow properties for better quality
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            scene.add(directionalLight);
+
+            // Floor
+            const floorGeometry = new THREE.PlaneGeometry(100, 100);
+            // Use MeshStandardMaterial for better lighting interaction
+            const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x332244, roughness: 0.8, metalness: 0.2 });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+            floor.receiveShadow = true; // Allow floor to receive shadows
+            scene.add(floor);
+
+            // Obstacles (Cubes with alien-like material)
+            const obstacleGeometry = new THREE.BoxGeometry(2, 4, 2); // Taller boxes
+            const obstacleMaterial = new THREE.MeshStandardMaterial({
+                color: 0x6600ff, // Vibrant purple
+                roughness: 0.5,
+                metalness: 0.6,
+                emissive: 0x220044, // Slight glow
+            });
+
+            for (let i = 0; i < 15; i++) {
+                const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+                obstacle.position.x = (Math.random() - 0.5) * 60;
+                obstacle.position.y = 2; // Positioned on the floor (height/2)
+                obstacle.position.z = (Math.random() - 0.5) * 60;
+                obstacle.rotation.y = Math.random() * Math.PI * 2;
+                obstacle.castShadow = true;
+                obstacle.receiveShadow = true;
+                scene.add(obstacle);
+                obstacles.push(obstacle); // Add to obstacles array for collision detection
+            }
+
+            // Pointer Lock Controls Setup
+            controls = new PointerLockControls(camera, renderer.domElement);
+            // We don't add controls.getObject() directly to the scene because we only want the camera's rotation,
+            // not its position, to be controlled directly by PointerLockControls.
+            // We'll manually update the camera's position based on phase shifts.
+
+            // Event listeners for pointer lock
+            blocker.addEventListener('click', () => {
+                controls.lock();
+            });
+            controls.addEventListener('lock', () => {
+                blocker.style.display = 'none';
+                instructions.classList.add('hidden'); // Hide instructions when locked
+            });
+            controls.addEventListener('unlock', () => {
+                blocker.style.display = 'flex'; // Show blocker again
+                instructions.classList.remove('hidden'); // Show instructions when unlocked
+            });
+
+            // Add controls object to scene AFTER setting its initial position
+            // This is not strictly necessary for PointerLockControls as it manipulates the camera directly,
+            // but good practice if you were adding the controls object itself.
+            // scene.add(controls.getObject()); // Not needed for PointerLockControls camera manipulation
+
+            // Keyboard event listeners
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // Touch event listeners
+            addTouchListener(touchW, 'w');
+            addTouchListener(touchA, 'a');
+            addTouchListener(touchS, 's');
+            addTouchListener(touchD, 'd');
+
+            // Instructions toggle
+            instructions.addEventListener('click', (event) => {
+                 // Prevent locking when clicking instructions
+                 event.stopPropagation();
+                 if (instructions.children.length > 1) { // Check if instructions are expanded
+                     // Simple toggle: hide all but the first line
+                     for(let i = 1; i < instructions.children.length; i++) {
+                         instructions.children[i].style.display = instructions.children[i].style.display === 'none' ? 'block' : 'none';
+                     }
+                 }
+            });
+            // Initially hide detailed instructions
+             for(let i = 1; i < instructions.children.length; i++) {
+                 instructions.children[i].style.display = 'none';
+             }
+
+
+            // Window resize listener
+            window.addEventListener('resize', onWindowResize);
+
+            // Start the animation loop
+            animate();
+        }
+
+        // --- Event Handlers ---
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    attemptPhaseShift();
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    attemptPhaseShift();
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    attemptPhaseShift();
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    attemptPhaseShift();
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = false;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = false;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = false;
+                    break;
+            }
+        }
+
+        // Helper for touch controls
+        function addTouchListener(element, key) {
+            element.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Prevent scrolling/zooming
+                handleTouch(key, true);
+            });
+            element.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                handleTouch(key, false);
+            });
+             element.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                handleTouch(key, false);
+            });
+        }
+
+        // Simulate key presses for touch
+         function handleTouch(key, isPressed) {
+             switch (key) {
+                 case 'w':
+                     moveForward = isPressed;
+                     if (isPressed) attemptPhaseShift();
+                     break;
+                 case 'a':
+                     moveLeft = isPressed;
+                     if (isPressed) attemptPhaseShift();
+                     break;
+                 case 's':
+                     moveBackward = isPressed;
+                     if (isPressed) attemptPhaseShift();
+                     break;
+                 case 'd':
+                     moveRight = isPressed;
+                     if (isPressed) attemptPhaseShift();
+                     break;
+             }
+         }
+
+
+        function onWindowResize() {
+            // Adjust camera aspect ratio and renderer size on window resize
+            if (gameContainer && renderer && camera) {
+                camera.aspect = gameContainer.clientWidth / gameContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(gameContainer.clientWidth, gameContainer.clientHeight);
+            }
+        }
+
+        // --- Movement Logic ---
+        function attemptPhaseShift() {
+            if (!controls.isLocked) return; // Only move when pointer is locked
+
+            const time = performance.now();
+            if (time < lastShiftTime + shiftCooldown) {
+                return; // Cooldown active
+            }
+
+             // Reset velocity and direction
+            velocity.set(0, 0, 0);
+            direction.set(0, 0, 0);
+
+            // Calculate movement direction based on camera orientation
+            // W/S -> Forward/Backward (+1 / -1)
+            direction.z = Number(moveForward) - Number(moveBackward);
+            // A/D -> Left/Right (+1 / -1)
+            direction.x = Number(moveLeft) - Number(moveRight); // A = +1 (left), D = -1 (right) relative to this value now
+            direction.normalize(); // Ensure consistent speed in all directions
+
+            // Get the forward and right vectors from the camera
+            const forward = new THREE.Vector3();
+            const right = new THREE.Vector3();
+            camera.getWorldDirection(forward); // Direction camera is looking (negative Z relative to camera)
+
+             // Calculate right vector perpendicular to camera's forward, projected onto XZ plane
+            const cameraForwardXZ = new THREE.Vector3(forward.x, 0, forward.z).normalize();
+            const cameraRightXZ = new THREE.Vector3().crossVectors(camera.up, cameraForwardXZ).normalize(); // Points Right
+
+            // Calculate the final shift vector based on input and camera direction
+            const shiftVector = new THREE.Vector3();
+            // Apply forward/backward movement
+            // direction.z = 1 for W (forward), -1 for S (backward)
+            shiftVector.addScaledVector(forward, direction.z * shiftDistance);
+
+            // Apply left/right movement (FIXED: Removed negation to match user observation)
+            // direction.x is +1 for A (left) and -1 for D (right)
+            // cameraRightXZ points right.
+            // To move right (A), we need to ADD cameraRightXZ * 1 (scale = direction.x = 1)
+            // To move left (D), we need to ADD cameraRightXZ * -1 (scale = direction.x = -1)
+            shiftVector.addScaledVector(cameraRightXZ, direction.x * shiftDistance); // REMOVED the leading '-' sign
+
+            // Calculate the target position
+            const targetPosition = camera.position.clone().add(shiftVector);
+            targetPosition.y = cameraHeight; // Keep the camera at the correct height
+
+            // --- Basic Collision Detection ---
+            let collision = false;
+            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                targetPosition,
+                new THREE.Vector3(0.5, cameraHeight, 0.5) // Player's bounding box
+            );
+
+            for (const obstacle of obstacles) {
+                const obstacleBox = new THREE.Box3().setFromObject(obstacle);
+                if (playerBox.intersectsBox(obstacleBox)) {
+                    collision = true;
+                    break; // Stop checking after first collision
+                }
+            }
+
+            // --- Perform Shift ---
+            if (!collision) {
+                camera.position.copy(targetPosition); // Instantly move the camera
+                lastShiftTime = time; // Update last shift time
+
+                // Trigger visual effect
+                shiftIndicator.classList.add('active');
+                setTimeout(() => {
+                    shiftIndicator.classList.remove('active');
+                }, 50); // Duration of the flash effect
+            } else {
+                 // Optional: Add feedback for failed shift (e.g., sound, subtle screen shake)
+                 console.log("Shift blocked by obstacle!");
+            }
+        }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Note: We don't need delta time calculations for position updates
+            // because the movement is instantaneous phase shifts triggered by key presses.
+            // We only need the loop for rendering.
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Start ---
+         // Ensure DOM is fully loaded before initializing
+        window.onload = init;
+
+    </script>
+</body>
+</html>
